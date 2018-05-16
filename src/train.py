@@ -1,9 +1,11 @@
 import os
 
+
 def load_data(path_to_data):
     # なんか
     # data = [(label1(int),document1(str)),(label2(),...
     return data
+
 
 def main():
     # load data
@@ -22,5 +24,5 @@ def main():
     return 0
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
     main()
