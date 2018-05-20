@@ -2,8 +2,10 @@ import os
 
 
 def load_data(path_to_data):
-    # なんか
-    # data = [(label1(int),document1(str)),(label2(),...
+    data = []
+    with open(path_to_data) as raw_data:
+        for line in raw_data:
+            data.append((line.strip().split(',')))
     return data
 
 
