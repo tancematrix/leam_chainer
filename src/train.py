@@ -1,6 +1,9 @@
 import os
 from gensim.models import KeyedVectors
 import chainer
+import numpy as np
+
+PAD = -1
 
 
 def load_data(path_to_data):
@@ -10,20 +13,20 @@ def load_data(path_to_data):
         for line in raw_data:
             y, x = line.strip().split(',')
             xs.append(x)
-            ys.append(y)
+            ys.append(int(y))
     return xs, ys
 
 
-def assign_id_to_document(xs, word2index):
+def assign_id_to_document(xs, word2index, max_length=100):
     ids = []
     for x in xs:
         words = x.split(' ')
-        cur_ids = []
-        for word in words:
+        cur_ids = [PAD] * max_length
+        for index, word in enumerate(words[:max_length]):
             id = word2index.get(word, word2index['<UNK>'])
-            cur_ids.append(id)
+            cur_ids[index] = id
         ids.append(cur_ids)
-    return ids
+    return np.array(ids, np.int32)
 
 
 def main():
