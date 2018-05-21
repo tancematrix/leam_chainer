@@ -7,10 +7,22 @@ def load_data(path_to_data):
     ys = []
     with open(path_to_data) as raw_data:
         for line in raw_data:
-            y,x = line.strip().split(',')
+            y, x = line.strip().split(',')
             xs.append(x)
             ys.append(y)
     return xs, ys
+
+
+def assign_id_to_document(xs, word2index):
+    ids = []
+    for x in xs:
+        words = x.split(' ')
+        cur_ids = []
+        for word in words:
+            id = word2index.get(word, word2index['<UNK>'])
+            cur_ids.append(id)
+        ids.append(cur_ids)
+    return ids
 
 
 def main():
@@ -25,11 +37,9 @@ def main():
     word2index = {}
     for index, word in enumerate(word_vectors.index2word):
         word2index[word] = index
-    from IPython import embed;
-    embed()
 
     # convert document to ids
-
+    train_ids = assign_id_to_document(train_x, word2index)
     # define a model
 
     # get results
