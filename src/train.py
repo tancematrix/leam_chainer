@@ -1,5 +1,6 @@
 import os
 from gensim.models import KeyedVectors
+import chainer
 
 
 def load_data(path_to_data):
@@ -40,7 +41,12 @@ def main():
 
     # convert document to ids
     train_ids = assign_id_to_document(train_x, word2index)
+    test_ids = assign_id_to_document(test_x, word2index)
+
+    from IPython import embed; embed()
     # define a model
+    train = chainer.datasets.TupleDataset(train_ids, train_y)
+    test = chainer.datasets.TupleDataset(test_ids, train_y)
 
     # get results
 
