@@ -1,9 +1,30 @@
 import os
 from gensim.models import KeyedVectors
 import chainer
+import chainer.functions as F
+import chainer.links as L
+from chainer import training
+from chainer.training import extensions
 import numpy as np
 
 PAD = -1
+
+
+class MLP(chainer.Chain):
+
+    def __init__(self, n_vocab, n_embed, n_units, W=None):
+        super(MLP, self).__init__()
+        with self.init_scope():
+            # the size of the inputs to each layer will be inferred
+            self.embed = L.EmbedID(n_vocab, n_embed, initialW=W)
+            self.l1 = L.Linear(n_embed, n_units)
+            self.l2 = L.Linear(n_units, 4)
+
+    def __call__(self, x):
+        e = self.embed(x)
+        h1 = F.average(e, axis=1)
+        h2 = F.relu(self.l1(h1))
+        return self.l2(h2)
 
 
 def load_data(path_to_data):
@@ -46,12 +67,39 @@ def main():
     train_ids = assign_id_to_document(train_x, word2index)
     test_ids = assign_id_to_document(test_x, word2index)
 
-    from IPython import embed; embed()
     # define a model
     train = chainer.datasets.TupleDataset(train_ids, train_y)
-    test = chainer.datasets.TupleDataset(test_ids, train_y)
+    test = chainer.datasets.TupleDataset(test_ids, test_y)
 
-    # get results
+    model = MLP(
+        n_vocab=len(word2index),
+        n_embed=128,
+        n_units=64
+    )
+    model = L.Classifier(model)
+
+    optimizer = chainer.optimizers.Adam()
+    optimizer.setup(model)
+
+    batchsize = 64
+    train_iter = chainer.iterators.SerialIterator(train, batchsize)
+    test_iter = chainer.iterators.SerialIterator(test, batchsize,
+                                                 repeat=False, shuffle=False)
+
+    gpu = -1
+    epoch = 10
+    out = 'result'
+    updater = training.updaters.StandardUpdater(
+        train_iter, optimizer, device=gpu)
+    trainer = training.Trainer(updater, (epoch, 'epoch'), out=out)
+
+    trainer.extend(extensions.LogReport())
+
+    trainer.extend(extensions.PrintReport(
+        ['epoch', 'main/loss', 'validation/main/loss',
+         'main/accuracy', 'validation/main/accuracy', 'elapsed_time']))
+
+    trainer.run()
 
     return 0
 
