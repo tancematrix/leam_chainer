@@ -16,13 +16,13 @@ class MLP(chainer.Chain):
         super(MLP, self).__init__()
         with self.init_scope():
             # the size of the inputs to each layer will be inferred
-            self.embed = L.EmbedID(n_vocab, n_embed, initialW=W)
+            self.embed = L.EmbedID(n_vocab, n_embed, initialW=W, ignore_label=PAD)
             self.l1 = L.Linear(n_embed, n_units)
             self.l2 = L.Linear(n_units, 4)
 
     def __call__(self, x):
         e = self.embed(x)
-        h1 = F.average(e, axis=1)
+        h1 = F.sum(e, axis=1) / self.xp.sum(x != PAD, axis=1)[:, None]
         h2 = F.relu(self.l1(h1))
         return self.l2(h2)
 
@@ -73,9 +73,12 @@ def main():
 
     model = MLP(
         n_vocab=len(word2index),
-        n_embed=128,
-        n_units=64
+        n_embed=word_vectors.vector_size,
+        n_units=64,
+        W=word_vectors.vectors
     )
+    model.embed.disable_update()
+
     model = L.Classifier(model)
 
     optimizer = chainer.optimizers.Adam()
@@ -98,6 +101,8 @@ def main():
     trainer.extend(extensions.PrintReport(
         ['epoch', 'main/loss', 'validation/main/loss',
          'main/accuracy', 'validation/main/accuracy', 'elapsed_time']))
+
+    trainer.extend(extensions.Evaluator(test_iter, model, device=gpu))
 
     trainer.run()
 
