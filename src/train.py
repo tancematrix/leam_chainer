@@ -10,6 +10,8 @@ from chainer.training import extensions
 import numpy as np
 
 PAD = -1
+VALIDATION_SIZE = 500
+
 
 class MLP(chainer.Chain):
 
@@ -82,9 +84,14 @@ def main():
     train_ids = assign_id_to_document(train_x, word2index)
     test_ids = assign_id_to_document(test_x, word2index)
 
+    # validation
+    train_ids, valid_ids = train_ids[VALIDATION_SIZE:], train_ids[:VALIDATION_SIZE]
+    train_y, valid_y = train_y[VALIDATION_SIZE:], train_y[:VALIDATION_SIZE]
+
     # define a model
     train = chainer.datasets.TupleDataset(train_ids, train_y)
     test = chainer.datasets.TupleDataset(test_ids, test_y)
+    valid = chainer.datasets.TupleDataset(valid_ids, valid_y)
 
     model = MLP(
         n_vocab=len(word2index),
@@ -102,7 +109,8 @@ def main():
     train_iter = chainer.iterators.SerialIterator(train, args.batchsize)
     test_iter = chainer.iterators.SerialIterator(test, args.batchsize,
                                                  repeat=False, shuffle=False)
-
+    valid_iter = chainer.iterators.SerialIterator(valid, args.batchsize,
+                                                  repeat=False, shuffle=False)
 
     updater = training.updaters.StandardUpdater(
         train_iter, optimizer, device=args.gpu)
@@ -114,7 +122,7 @@ def main():
         ['epoch', 'main/loss', 'validation/main/loss',
          'main/accuracy', 'validation/main/accuracy', 'elapsed_time']))
 
-    trainer.extend(extensions.Evaluator(test_iter, model, device=args.gpu))
+    trainer.extend(extensions.Evaluator(valid_iter, model, device=args.gpu))
 
     trainer.run()
 
