@@ -102,6 +102,10 @@ def main():
     model.embed.disable_update()
 
     model = L.Classifier(model)
+    if args.gpu >= 0:
+        # Make a specified GPU current
+        chainer.backends.cuda.get_device_from_id(args.gpu).use()
+        model.to_gpu()  # Copy the model to the GPU
 
     optimizer = chainer.optimizers.Adam()
     optimizer.setup(model)
