@@ -128,6 +128,11 @@ def main():
 
     trainer.extend(extensions.Evaluator(valid_iter, model, device=args.gpu))
 
+    trainer.extend(
+        extensions.snapshot_object(model, 'best_model'),
+        trigger=chainer.training.triggers.MinValueTrigger('validation/main/loss')
+    )
+
     trainer.run()
 
     return 0
