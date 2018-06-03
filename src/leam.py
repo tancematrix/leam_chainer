@@ -25,11 +25,8 @@ class MLP(chainer.Chain):
             self.l2 = L.Linear(n_units, 4)
 
             # parameters to compute attention score
-            # W_shape should be (window_size,)
-            window_size = 1
-            self.lw = L.Scale(axis=0, W_shape=(window_size,))
-            self.lb = L.Bias(axis=0, shape=(n_class,))
-
+            self.lw = L.Linear(None, 1)
+            self.lb = L.Bias(axis=1, shape=(n_class,))
             # c:label embedding parameter
             self.c = Parameter(
                 initializer=self.xp.random.randn(n_embed, n_class).astype(self.xp.float32)
@@ -38,21 +35,43 @@ class MLP(chainer.Chain):
     def __call__(self, x):
         e = self.embed(x)
         # attention scare
-
+        batch_size, sentence_len, n_embed = e.shape
+        n_embed, n_class = self.c.shape
         # g = g / g_norm : normalize
-        g = np.matmul(e.data, self.c.data)
 
-        # extend g depending on window_size
-        sentence_len = e.data.shape[1]
-        m = [sentence_len]
+        c = F.broadcast_to(self.c, (batch_size, n_embed, n_class))
+        g = F.matmul(e, c)
+        g = F.rollaxis(g, axis=2, start=1)
+
+        # padding
+
+        window_size = 0
+        mat_pad = np.array([[[PAD] * window_size] * n_class] * batch_size, dtype=np.float32)
+        g = F.concat((mat_pad, g, mat_pad), axis=2)
+
+        # g = [g]*sentence_len
+        g_l = []
         for i in range(sentence_len):
-            u_w = F.relu(self.lw(g[i, :]))
-            u_b = F.sum(self.lb(u_w))
-            u = F.max(u_b)
-            m[i] = u
-        beta = F.softmax(m)
+            g_i = F.get_item(g, (Ellipsis, slice(i, i + 2 * window_size + 1)))
+            g_l.append(g_i)
 
-        h1 = F.sum(F.scale(e, beta, axis=1)) / self.xp.sum(x != PAD, axis=1)[:, None]
+        g = F.stack(g_l, axis=1)
+        # g.shape = (batch_size, sentence_len, n_class,  window_size, n_class)
+
+        g = F.rollaxis(g, axis=3, start=1)
+        g = F.reshape(g, (batch_size * sentence_len * n_class, window_size * 2 + 1))
+        u_w = F.relu(self.lw(g))
+        # g.shape = (batch_size*sentence_len*n_class, 1)
+        u_w = F.reshape(u_w, (batch_size * sentence_len, n_class))
+
+        u_b = self.lb(u_w)
+        # g.shape = (batch_size*sentence_len, n_class)
+
+        u = F.max(u_b, axis=1)
+        u = F.reshape(u, (batch_size, sentence_len))
+        beta = F.softmax(u)
+        beta = F.expand_dims(beta, axis=1)
+        h1 = F.squeeze(F.matmul(beta, e)) / self.xp.sum(x != PAD, axis=1)[:, None]
         h2 = F.relu(self.l1(h1))
 
         return self.l2(h2)
