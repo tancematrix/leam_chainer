@@ -159,8 +159,8 @@ def main():
                         help='Number of units')
     parser.add_argument('--window', '-w', type=int, default=20,
                         help='Window Size')
-    parser.add_argument('--gradclip', '-c', type=float, default=3.0,
-                        help='Gradient norm threshold to clip')
+    parser.add_argument('--max-length', type=int, default=100,
+                        help='Maximum sentence length')
     args = parser.parse_args()
 
     # load data
@@ -207,7 +207,6 @@ def main():
 
     optimizer = chainer.optimizers.Adam()
     optimizer.setup(model)
-    optimizer.add_hook(chainer.optimizer_hooks.GradientClipping(args.gradclip))
 
     train_iter = chainer.iterators.SerialIterator(train, args.batchsize)
     test_iter = chainer.iterators.SerialIterator(test, args.batchsize,
