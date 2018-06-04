@@ -25,8 +25,7 @@ class MLP(chainer.Chain):
             self.l2 = L.Linear(n_units, 4)
 
             # parameters to compute attention score
-            self.lw = L.Linear(None, 1)
-            self.lb = L.Bias(axis=1, shape=(n_class,))
+            self.l3 = L.Linear(n_window * 2 + 1, 1)
             # c:label embedding parameter
             self.c = Parameter(
                 initializer=self.xp.random.randn(n_embed, n_class).astype(self.xp.float32)
@@ -35,55 +34,48 @@ class MLP(chainer.Chain):
 
     def __call__(self, x):
         batch_size, sentence_len = x.shape
-        x = self.pad_sequence(x)
-        e = self.embed(x)
-        # attention scare
-
         n_embed, n_class = self.c.shape
-        # g = g / g_norm : normalize
 
+        e = self.embed(x)
+        ep = self.pad_sequence(e)
+
+        # Eq. (2)
         c = F.broadcast_to(self.c, (batch_size, n_embed, n_class))
-        g = F.normalize(F.matmul(e, c), axis=2)
+        g = F.normalize(F.matmul(ep, c), axis=2)
 
-        # g = [g]*sentence_len
-
-        g = self.make_ngram(g)
-        from IPython import embed; embed()
-        # g.shape = (batch_size, sentence_len,  window_size, n_class)
-
-        g = F.rollaxis(g, axis=3, start=2)
+        # Eq. (3)
+        g = self.make_ngram(g)  # (batch_size, sentence_len,  window_size, n_class)
         g = F.reshape(g, (batch_size * sentence_len * n_class, self.n_window * 2 + 1))
-        u_w = F.relu(self.lw(g))
-        # g.shape = (batch_size*sentence_len*n_class, 1)
-        u_w = F.reshape(u_w, (batch_size * sentence_len, n_class))
+        u = F.relu(self.l3(g))  # (batch_size * sentence_len * n_class, 1)
+        u = F.reshape(u, (batch_size, sentence_len, n_class))
 
-        u_b = self.lb(u_w)
-        # g.shape = (batch_size*sentence_len, n_class)
+        # Eq. (4)
+        m = F.max(u, axis=2)  # (batch_size, sentence_len)
 
-        u = F.max(u_b, axis=1)
-        u = F.reshape(u, (batch_size, sentence_len))
-        beta = F.softmax(u)
+        # Eq. (5)
+        mask = (x == PAD).astype(self.xp.float32) * -1024.0  # make attention-scores for PAD 0
+        m = m + mask
+        beta = F.softmax(m)
         beta = F.expand_dims(beta, axis=1)
-        h1 = F.squeeze(F.matmul(beta, e)) / self.xp.sum(x != PAD, axis=1)[:, None]
-        h2 = F.relu(self.l1(h1))
 
-        return self.l2(h2)
+        # Eq. (6)
+        z = F.squeeze(F.matmul(beta, e))  # (batch_size, n_embed)
 
-    def pad_sequence(self, x):
-        batch_size, sentence_len = x.shape
-        x = self.xp.concatenate(
-            (self.xp.zeros((batch_size, self.n_window), self.xp.int32),
-             x,
-             self.xp.zeros((batch_size, self.n_window), self.xp.int32)
-             ),
-            axis=1
-        )
-        return x
+        # f_2
+        h = F.relu(self.l1(z))
+        return self.l2(h)
+
+    def pad_sequence(self, e):
+        batch_size, sentence_len, n_embed = e.shape
+        pad = self.xp.full((batch_size, self.n_window), PAD, dtype=self.xp.int32)
+        ep = self.embed(pad)
+        return F.concat((ep, e, ep), axis=1)
 
     def make_ngram(self, g):
         _, sentence_len, _ = g.shape
         sentence_len = sentence_len - self.n_window * 2
         return F.stack([g[:, i:i + self.n_window * 2 + 1:, :] for i in range(sentence_len)], axis=1)
+
 
 def load_data(path_to_data):
     xs = []
@@ -123,7 +115,8 @@ def main():
                         help='Number of units')
     parser.add_argument('--window', '-w', type=int, default=20,
                         help='Window Size')
-
+    parser.add_argument('--gradclip', '-c', type=float, default=3.0,
+                        help='Gradient norm threshold to clip')
     args = parser.parse_args()
 
     # load data
@@ -168,8 +161,9 @@ def main():
         chainer.backends.cuda.get_device_from_id(args.gpu).use()
         model.to_gpu()  # Copy the model to the GPU
 
-    optimizer = chainer.optimizers.Adam()
+    optimizer = chainer.optimizers.SGD()
     optimizer.setup(model)
+    optimizer.add_hook(chainer.optimizer_hooks.GradientClipping(args.gradclip))
 
     train_iter = chainer.iterators.SerialIterator(train, args.batchsize)
     test_iter = chainer.iterators.SerialIterator(test, args.batchsize,
