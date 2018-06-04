@@ -15,16 +15,15 @@ PAD = -1
 VALIDATION_SIZE = 500
 
 
-class MLP(chainer.Chain):
+class LEAM(chainer.Chain):
 
     def __init__(self, n_vocab, n_embed, n_units, n_class, n_window, dropout, W=None):
-        super(MLP, self).__init__()
+        super(LEAM, self).__init__()
         with self.init_scope():
             # the size of the inputs to each layer will be inferred
             self.embed = L.EmbedID(n_vocab, n_embed, initialW=W, ignore_label=PAD)
             self.l1 = L.Linear(n_embed, n_units)
-            self.l2 = L.Linear(n_embed, n_units)
-            self.l3 = L.Linear(n_units, 4)
+            self.l2 = L.Linear(n_units, 4)
 
             # parameters to compute attention score
             self.attention = L.Linear(n_window * 2 + 1, 1)
@@ -70,10 +69,8 @@ class MLP(chainer.Chain):
         z = F.squeeze(F.matmul(beta, e))  # (batch_size, n_embed)
 
         # f_2
-        z = F.dropout(z, ratio=self.dropout)
-        h = F.dropout(F.relu(self.l1(z)), ratio=self.dropout)
-        h = F.dropout(F.relu(self.l2(h)), ratio=self.dropout)
-        return self.l3(h)
+        h = F.relu(self.l1(z))
+        return self.l2(h)
 
     def pad_sequence(self, e):
         batch_size, sentence_len, n_embed = e.shape
@@ -88,9 +85,8 @@ class MLP(chainer.Chain):
 
     def regularize(self):
         # Eq. (9)
-        h = F.dropout(F.relu(self.l1(self.c)), ratio=self.dropout)
-        h = F.dropout(F.relu(self.l2(h)), ratio=self.dropout)
-        y = self.l3(h)
+        h = F.relu(self.l1(self.c))
+        y = self.l2(h)
         return F.softmax_cross_entropy(y, self.xp.arange(0, self.n_class))
 
 
@@ -167,17 +163,13 @@ def main():
                         help='Window Size')
     parser.add_argument('--max-length', type=int, default=200,
                         help='Maximum sentence length')
-    parser.add_argument('--dropout', type=float, default=.1,
-                        help='Dropout ratio')
     args = parser.parse_args()
 
     # load data
     DATA_DIR = '/baobab/kiyomaru/2018-shinjin/jumanpp.midasi'
     PATH_TO_TRAIN = os.path.join(DATA_DIR, 'train.csv')
-    PATH_TO_TEST = os.path.join(DATA_DIR, 'test.csv')
     PATH_TO_WE = '/share/data/word2vec/2016.08.02/w2v.midasi.256.100K.bin'
     train_x, train_y = load_data(PATH_TO_TRAIN)
-    test_x, test_y = load_data(PATH_TO_TEST)
     word_vectors = KeyedVectors.load_word2vec_format(PATH_TO_WE, binary=True)
     word2index = {}
     for index, word in enumerate(word_vectors.index2word):
@@ -185,7 +177,6 @@ def main():
 
     # convert document to ids
     train_ids = assign_id_to_document(train_x, word2index)
-    test_ids = assign_id_to_document(test_x, word2index)
 
     # validation
     train_ids, valid_ids = train_ids[VALIDATION_SIZE:], train_ids[:VALIDATION_SIZE]
@@ -193,16 +184,14 @@ def main():
 
     # define a model
     train = chainer.datasets.TupleDataset(train_ids, train_y)
-    test = chainer.datasets.TupleDataset(test_ids, test_y)
     valid = chainer.datasets.TupleDataset(valid_ids, valid_y)
 
-    model = MLP(
+    model = LEAM(
         n_vocab=len(word2index),
         n_embed=word_vectors.vector_size,
         n_units=args.unit,
         n_class=4,
         n_window=args.window,
-        dropout=args.dropout,
         W=word_vectors.vectors
     )
 
@@ -218,8 +207,6 @@ def main():
     optimizer.setup(model)
 
     train_iter = chainer.iterators.SerialIterator(train, args.batchsize)
-    test_iter = chainer.iterators.SerialIterator(test, args.batchsize,
-                                                 repeat=False, shuffle=False)
     valid_iter = chainer.iterators.SerialIterator(valid, args.batchsize,
                                                   repeat=False, shuffle=False)
 

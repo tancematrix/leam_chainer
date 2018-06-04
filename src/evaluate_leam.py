@@ -18,7 +18,7 @@ from gensim.models import KeyedVectors
 
 from sklearn.metrics import f1_score
 
-from leam import MLP
+from leam import LEAM
 from leam import load_data
 from leam import assign_id_to_document
 
@@ -54,13 +54,12 @@ def main():
     y_true = numpy.array(test_y)
 
     # define model
-    model = MLP(
+    model = LEAM(
         n_vocab=len(word2index),
         n_embed=word_vectors.vector_size,
         n_units=args.unit,
         n_class=4,
         n_window=args.window,
-        dropout=0.0,
         W=None
     )
     model = L.Classifier(model)
