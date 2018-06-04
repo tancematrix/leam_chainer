@@ -23,10 +23,11 @@ class MLP(chainer.Chain):
             # the size of the inputs to each layer will be inferred
             self.embed = L.EmbedID(n_vocab, n_embed, initialW=W, ignore_label=PAD)
             self.l1 = L.Linear(n_embed, n_units)
-            self.l2 = L.Linear(n_units, 4)
+            self.l2 = L.Linear(n_embed, n_units)
+            self.l3 = L.Linear(n_units, 4)
 
             # parameters to compute attention score
-            self.l3 = L.Linear(n_window * 2 + 1, 1)
+            self.attention = L.Linear(n_window * 2 + 1, 1)
             # c:label embedding parameter
             self.c = Parameter(
                 initializer=self.xp.random.randn(n_class, n_embed).astype(self.xp.float32)
@@ -53,7 +54,7 @@ class MLP(chainer.Chain):
         # Eq. (3)
         g = self.make_ngram(g)  # (batch_size, sentence_len,  window_size, n_class)
         g = F.reshape(g, (batch_size * sentence_len * n_class, self.n_window * 2 + 1))
-        u = F.relu(self.l3(g))  # (batch_size * sentence_len * n_class, 1)
+        u = F.relu(self.attention(g))  # (batch_size * sentence_len * n_class, 1)
         u = F.reshape(u, (batch_size, sentence_len, n_class))
 
         # Eq. (4)
@@ -69,8 +70,10 @@ class MLP(chainer.Chain):
         z = F.squeeze(F.matmul(beta, e))  # (batch_size, n_embed)
 
         # f_2
+        z = F.dropout(z, ratio=self.dropout)
         h = F.dropout(F.relu(self.l1(z)), ratio=self.dropout)
-        return self.l2(h)
+        h = F.dropout(F.relu(self.l2(h)), ratio=self.dropout)
+        return self.l3(h)
 
     def pad_sequence(self, e):
         batch_size, sentence_len, n_embed = e.shape
@@ -85,8 +88,9 @@ class MLP(chainer.Chain):
 
     def regularize(self):
         # Eq. (9)
-        h = F.relu(self.l1(self.c))
-        y = self.l2(h)
+        h = F.dropout(F.relu(self.l1(self.c)), ratio=self.dropout)
+        h = F.dropout(F.relu(self.l2(h)), ratio=self.dropout)
+        y = self.l3(h)
         return F.softmax_cross_entropy(y, self.xp.arange(0, self.n_class))
 
 
