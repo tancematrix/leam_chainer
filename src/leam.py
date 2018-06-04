@@ -68,7 +68,7 @@ class LEAM(chainer.Chain):
         z = F.squeeze(F.matmul(beta, e))  # (batch_size, n_embed)
 
         # f_2
-        h = F.relu(self.l1(z))
+        h = F.dropout(F.relu(self.l1(z)))
         return self.l2(h)
 
     def pad_sequence(self, e):
@@ -84,7 +84,7 @@ class LEAM(chainer.Chain):
 
     def regularize(self):
         # Eq. (9)
-        h = F.relu(self.l1(self.c))
+        h = F.dropout(F.relu(self.l1(self.c)))
         y = self.l2(h)
         return F.softmax_cross_entropy(y, self.xp.arange(0, self.n_class))
 
