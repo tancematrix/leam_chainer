@@ -95,6 +95,7 @@ class MLP(chainer.Chain):
 
 
 class LeamClassifier(L.Classifier):
+    """Classifier: https://docs.chainer.org/en/stable/reference/generated/chainer.links.Classifier.html"""
 
     def __call__(self, *args, **kwargs):
         if isinstance(self.label_key, int):
@@ -118,7 +119,7 @@ class LeamClassifier(L.Classifier):
         self.accuracy = None
         self.y = self.predictor(*args, **kwargs)
         self.loss = self.lossfun(self.y, t)
-        self.loss = self.loss + self.predictor.regularize()
+        self.loss = self.loss + self.predictor.regularize()  # add regularization term
         reporter.report({'loss': self.loss}, self)
         if self.compute_accuracy:
             self.accuracy = self.accfun(self.y, t)
@@ -240,8 +241,6 @@ def main():
     )
 
     trainer.run()
-
-    return 0
 
 
 if __name__ == '__main__':
