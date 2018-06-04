@@ -148,7 +148,7 @@ def assign_id_to_document(xs, word2index, max_length=100):
 def main():
     # keyboard arguments
     parser = argparse.ArgumentParser(description='Chainer example: WordClassification')
-    parser.add_argument('--batchsize', '-b', type=int, default=64,
+    parser.add_argument('--batchsize', '-b', type=int, default=128,
                         help='Number of images in each mini-batch')
     parser.add_argument('--epoch', '-e', type=int, default=10,
                         help='Number of sweeps over the dataset to train')
@@ -156,11 +156,11 @@ def main():
                         help='GPU ID (negative value indicates CPU)')
     parser.add_argument('--out', '-o', default='result',
                         help='Directory to output the result')
-    parser.add_argument('--unit', '-u', type=int, default=64,
+    parser.add_argument('--unit', '-u', type=int, default=256,
                         help='Number of units')
     parser.add_argument('--window', '-w', type=int, default=20,
                         help='Window Size')
-    parser.add_argument('--max-length', type=int, default=100,
+    parser.add_argument('--max-length', type=int, default=200,
                         help='Maximum sentence length')
     parser.add_argument('--dropout', type=float, default=.1,
                         help='Dropout ratio')
