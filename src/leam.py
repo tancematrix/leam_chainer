@@ -16,7 +16,7 @@ VALIDATION_SIZE = 500
 
 class MLP(chainer.Chain):
 
-    def __init__(self, n_vocab, n_embed, n_units, n_class, W=None):
+    def __init__(self, n_vocab, n_embed, n_units, n_class, n_window, W=None):
         super(MLP, self).__init__()
         with self.init_scope():
             # the size of the inputs to each layer will be inferred
@@ -31,35 +31,28 @@ class MLP(chainer.Chain):
             self.c = Parameter(
                 initializer=self.xp.random.randn(n_embed, n_class).astype(self.xp.float32)
             )
+        self.n_window = n_window
 
     def __call__(self, x):
+        batch_size, sentence_len = x.shape
+        x = self.pad_sequence(x)
         e = self.embed(x)
         # attention scare
-        batch_size, sentence_len, n_embed = e.shape
+
         n_embed, n_class = self.c.shape
         # g = g / g_norm : normalize
 
         c = F.broadcast_to(self.c, (batch_size, n_embed, n_class))
-        g = F.matmul(e, c)
-        g = F.rollaxis(g, axis=2, start=1)
-
-        # padding
-
-        window_size = 0
-        mat_pad = np.array([[[PAD] * window_size] * n_class] * batch_size, dtype=np.float32)
-        g = F.concat((mat_pad, g, mat_pad), axis=2)
+        g = F.normalize(F.matmul(e, c), axis=2)
 
         # g = [g]*sentence_len
-        g_l = []
-        for i in range(sentence_len):
-            g_i = F.get_item(g, (Ellipsis, slice(i, i + 2 * window_size + 1)))
-            g_l.append(g_i)
 
-        g = F.stack(g_l, axis=1)
-        # g.shape = (batch_size, sentence_len, n_class,  window_size, n_class)
+        g = self.make_ngram(g)
+        from IPython import embed; embed()
+        # g.shape = (batch_size, sentence_len,  window_size, n_class)
 
-        g = F.rollaxis(g, axis=3, start=1)
-        g = F.reshape(g, (batch_size * sentence_len * n_class, window_size * 2 + 1))
+        g = F.rollaxis(g, axis=3, start=2)
+        g = F.reshape(g, (batch_size * sentence_len * n_class, self.n_window * 2 + 1))
         u_w = F.relu(self.lw(g))
         # g.shape = (batch_size*sentence_len*n_class, 1)
         u_w = F.reshape(u_w, (batch_size * sentence_len, n_class))
@@ -76,6 +69,21 @@ class MLP(chainer.Chain):
 
         return self.l2(h2)
 
+    def pad_sequence(self, x):
+        batch_size, sentence_len = x.shape
+        x = self.xp.concatenate(
+            (self.xp.zeros((batch_size, self.n_window), self.xp.int32),
+             x,
+             self.xp.zeros((batch_size, self.n_window), self.xp.int32)
+             ),
+            axis=1
+        )
+        return x
+
+    def make_ngram(self, g):
+        _, sentence_len, _ = g.shape
+        sentence_len = sentence_len - self.n_window * 2
+        return F.stack([g[:, i:i + self.n_window * 2 + 1:, :] for i in range(sentence_len)], axis=1)
 
 def load_data(path_to_data):
     xs = []
@@ -113,6 +121,9 @@ def main():
                         help='Directory to output the result')
     parser.add_argument('--unit', '-u', type=int, default=64,
                         help='Number of units')
+    parser.add_argument('--window', '-w', type=int, default=20,
+                        help='Window Size')
+
     args = parser.parse_args()
 
     # load data
@@ -145,6 +156,7 @@ def main():
         n_embed=word_vectors.vector_size,
         n_units=args.unit,
         n_class=4,
+        n_window=args.window,
         W=word_vectors.vectors
     )
 
