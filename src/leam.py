@@ -17,7 +17,7 @@ VALIDATION_SIZE = 500
 
 class MLP(chainer.Chain):
 
-    def __init__(self, n_vocab, n_embed, n_units, n_class, n_window, W=None):
+    def __init__(self, n_vocab, n_embed, n_units, n_class, n_window, dropout, W=None):
         super(MLP, self).__init__()
         with self.init_scope():
             # the size of the inputs to each layer will be inferred
@@ -33,6 +33,7 @@ class MLP(chainer.Chain):
             )
         self.n_window = n_window
         self.n_class = n_class
+        self.dropout = dropout
 
     def __call__(self, x):
         batch_size, sentence_len = x.shape
@@ -68,7 +69,7 @@ class MLP(chainer.Chain):
         z = F.squeeze(F.matmul(beta, e))  # (batch_size, n_embed)
 
         # f_2
-        h = F.relu(self.l1(z))
+        h = F.dropout(F.relu(self.l1(z)), ratio=self.dropout)
         return self.l2(h)
 
     def pad_sequence(self, e):
@@ -161,6 +162,8 @@ def main():
                         help='Window Size')
     parser.add_argument('--max-length', type=int, default=100,
                         help='Maximum sentence length')
+    parser.add_argument('--dropout', type=float, default=.1,
+                        help='Dropout ratio')
     args = parser.parse_args()
 
     # load data
@@ -194,6 +197,7 @@ def main():
         n_units=args.unit,
         n_class=4,
         n_window=args.window,
+        dropout=args.dropout,
         W=word_vectors.vectors
     )
 

@@ -60,6 +60,7 @@ def main():
         n_units=args.unit,
         n_class=4,
         n_window=args.window,
+        dropout=0.0,
         W=None
     )
     model = L.Classifier(model)
