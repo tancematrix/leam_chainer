@@ -17,7 +17,7 @@ VALIDATION_SIZE = 500
 
 class LEAM(chainer.Chain):
 
-    def __init__(self, n_vocab, n_embed, n_units, n_class, n_window, dropout, W=None):
+    def __init__(self, n_vocab, n_embed, n_units, n_class, n_window, W=None):
         super(LEAM, self).__init__()
         with self.init_scope():
             # the size of the inputs to each layer will be inferred
@@ -33,7 +33,6 @@ class LEAM(chainer.Chain):
             )
         self.n_window = n_window
         self.n_class = n_class
-        self.dropout = dropout
 
     def __call__(self, x):
         batch_size, sentence_len = x.shape

@@ -18,9 +18,9 @@ from gensim.models import KeyedVectors
 
 from sklearn.metrics import f1_score
 
-from train import MLP
-from train import load_data
-from train import assign_id_to_document
+from mlp import MLP
+from mlp import load_data
+from mlp import assign_id_to_document
 
 chainer.using_config('train', False)
 

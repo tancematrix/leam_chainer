@@ -29,7 +29,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--batchsize', '-b', type=int, default=64,
                         help='Number of images in each mini-batch')
-    parser.add_argument('--unit', '-u', type=int, default=64,
+    parser.add_argument('--unit', '-u', type=int, default=256,
                         help='Number of units')
     parser.add_argument('--best-model', help='path to best model')
     parser.add_argument('--window', '-w', type=int, default=20,
