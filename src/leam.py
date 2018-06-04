@@ -8,6 +8,7 @@ import chainer.links as L
 from chainer import Parameter
 from chainer import training
 from chainer.training import extensions
+from chainer import reporter
 import numpy as np
 
 PAD = -1
@@ -31,6 +32,7 @@ class MLP(chainer.Chain):
                 initializer=self.xp.random.randn(n_class, n_embed).astype(self.xp.float32)
             )
         self.n_window = n_window
+        self.n_class = n_class
 
     def __call__(self, x):
         batch_size, sentence_len = x.shape
@@ -79,6 +81,44 @@ class MLP(chainer.Chain):
         _, sentence_len, _ = g.shape
         sentence_len = sentence_len - self.n_window * 2
         return F.stack([g[:, i:i + self.n_window * 2 + 1:, :] for i in range(sentence_len)], axis=1)
+
+    def regularize(self):
+        # Eq. (9)
+        h = F.relu(self.l1(self.c))
+        y = self.l2(h)
+        return F.softmax_cross_entropy(y, self.xp.arange(0, self.n_class))
+
+
+class LeamClassifier(L.Classifier):
+
+    def __call__(self, *args, **kwargs):
+        if isinstance(self.label_key, int):
+            if not (-len(args) <= self.label_key < len(args)):
+                msg = 'Label key %d is out of bounds' % self.label_key
+                raise ValueError(msg)
+            t = args[self.label_key]
+            if self.label_key == -1:
+                args = args[:-1]
+            else:
+                args = args[:self.label_key] + args[self.label_key + 1:]
+        elif isinstance(self.label_key, str):
+            if self.label_key not in kwargs:
+                msg = 'Label key "%s" is not found' % self.label_key
+                raise ValueError(msg)
+            t = kwargs[self.label_key]
+            del kwargs[self.label_key]
+
+        self.y = None
+        self.loss = None
+        self.accuracy = None
+        self.y = self.predictor(*args, **kwargs)
+        self.loss = self.lossfun(self.y, t)
+        self.loss = self.loss + self.predictor.regularize()
+        reporter.report({'loss': self.loss}, self)
+        if self.compute_accuracy:
+            self.accuracy = self.accfun(self.y, t)
+            reporter.report({'accuracy': self.accuracy}, self)
+        return self.loss
 
 
 def load_data(path_to_data):
@@ -159,7 +199,7 @@ def main():
 
     model.embed.disable_update()
 
-    model = L.Classifier(model)
+    model = LeamClassifier(model)
     if args.gpu >= 0:
         # Make a specified GPU current
         chainer.backends.cuda.get_device_from_id(args.gpu).use()
