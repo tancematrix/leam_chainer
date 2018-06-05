@@ -17,12 +17,12 @@ import chainer.functions as F
 from gensim.models import KeyedVectors
 
 from sklearn.metrics import f1_score
+from sklearn.metrics import precision_recall_fscore_support
+from sklearn.metrics import confusion_matrix
 
 from leam import LEAM
 from leam import load_data
 from leam import assign_id_to_document
-
-chainer.using_config('train', False)
 
 
 def main():
@@ -72,15 +72,24 @@ def main():
         sys.exit(1)
 
     # predict labels for test data
-    y_pred = []
-    for i in range(0, len(test_ids), args.batchsize):
-        x = test_ids[i:i + args.batchsize]
-        y = model.predictor(x)
-        y_pred.append(F.argmax(y, axis=1).data[:, None])
-    y_pred = numpy.vstack(y_pred)
+    with chainer.using_config('train', False):
+        y_pred = []
+        for i in range(0, len(test_ids), args.batchsize):
+            x = test_ids[i:i + args.batchsize]
+            y = model.predictor(x)
+            y_pred.append(F.argmax(y, axis=1).data[:, None])
+        y_pred = numpy.vstack(y_pred)
 
     # calculate macro-f1
-    print(f1_score(y_true, y_pred, average='macro'))
+    print('Macro-F: %.4f' % f1_score(y_true, y_pred, average='macro'))
+
+    print('\nClass\tPre\tRec\tF1\tSupport')
+    for i, (p, r, f, s) in enumerate(zip(*precision_recall_fscore_support(y_true, y_pred))):
+        print('%d\t%.4f\t%.4f\t%.4f\t%d' % (i, p, r, f, s))
+
+    print('\nConfusion matrix (row: true, column: prediction)')
+    for pred in confusion_matrix(y_true, y_pred):
+        print('\t'.join([str(p) for p in pred]) + '\t(Support: %d)' % sum(pred))
 
 
 if __name__ == '__main__':
