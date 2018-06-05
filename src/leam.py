@@ -175,7 +175,7 @@ def main():
         word2index[word] = index
 
     # convert document to ids
-    train_ids = assign_id_to_document(train_x, word2index)
+    train_ids = assign_id_to_document(train_x, word2index, args.max_length)
 
     # validation
     train_ids, valid_ids = train_ids[VALIDATION_SIZE:], train_ids[:VALIDATION_SIZE]
