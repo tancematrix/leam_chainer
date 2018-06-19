@@ -65,10 +65,10 @@ class LEAM(chainer.Chain):
         beta = F.expand_dims(beta, axis=1)
 
         # Eq. (6)
-        z = F.squeeze(F.matmul(beta, e))  # (batch_size, n_embed)
+        z = F.reshape(F.matmul(beta, e),(batch_size, n_embed))  # (batch_size, n_embed)
 
         # f_2
-        h = F.dropout(F.relu(self.l1(z)))
+        h = F.dropout(F.relu(self.l1(z)), ratio=.8)
         return self.l2(h)
 
     def pad_sequence(self, e):
@@ -84,9 +84,47 @@ class LEAM(chainer.Chain):
 
     def regularize(self):
         # Eq. (9)
-        h = F.dropout(F.relu(self.l1(self.c)))
+        h = F.dropout(F.relu(self.l1(self.c)), ratio=.8)
         y = self.l2(h)
         return F.softmax_cross_entropy(y, self.xp.arange(0, self.n_class))
+
+    def analyze(self, x):
+        batch_size, sentence_len = x.shape
+        n_class, n_embed = self.c.shape
+
+        e = self.embed(x)
+        ep = self.pad_sequence(e)
+
+        # Eq. (2)
+        c = F.broadcast_to(self.c, (batch_size, n_class, n_embed))
+        g = F.matmul(ep, c, transb=True)
+        norm_ep = self.xp.expand_dims(self.xp.linalg.norm(ep.data, axis=2), axis=2)
+        norm_c = self.xp.expand_dims(self.xp.linalg.norm(c.data, axis=2), axis=2)
+        denom = self.xp.matmul(norm_ep, self.xp.transpose(norm_c, (0, 2, 1))) + 1e-10  # avoid zero division
+        g = g / denom
+
+        # Eq. (3)
+        g = self.make_ngram(g)  # (batch_size, sentence_len,  window_size, n_class)
+        g = F.reshape(g, (batch_size * sentence_len * n_class, self.n_window * 2 + 1))
+        u = F.relu(self.attention(g))  # (batch_size * sentence_len * n_class, 1)
+        u = F.reshape(u, (batch_size, sentence_len, n_class))
+
+        # Eq. (4)
+        m = F.max(u, axis=2)  # (batch_size, sentence_len)
+
+        # Eq. (5)
+        mask = (x == PAD).astype(self.xp.float32) * -1024.0  # make attention-scores for PAD 0
+        m = m + mask
+        beta = F.softmax(m)
+        beta = F.expand_dims(beta, axis=1)
+
+        # Eq. (6)
+        z = F.reshape(F.matmul(beta, e), (batch_size, n_embed))
+        
+        # f_2
+        h = F.dropout(F.relu(self.l1(z)))
+        y = F.argmax(self.l2(h), axis=1)
+        return y.data, beta.data
 
 
 class LeamClassifier(L.Classifier):
