@@ -16,13 +16,10 @@ import chainer.functions as F
 
 from gensim.models import KeyedVectors
 
-from sklearn.metrics import f1_score
-from sklearn.metrics import precision_recall_fscore_support
-from sklearn.metrics import confusion_matrix
-
 from leam import LEAM
 from leam import load_data
 from leam import assign_id_to_document
+from sty import fg
 
 
 def main():
@@ -73,26 +70,28 @@ def main():
 
     # predict labels for test data
     with chainer.using_config('train', False):
-        y_pred = []
+        y_true = test_y[args.val_id]
         x = test_ids[args.val_id]
         x = x[None, :]
-        from IPython import embed;
-        embed()
-        y, beta = model.predictor(x).analyzer(x)
+        y_pred, beta = model.predictor.analyze(x)
 
+        # visualize
+        doc = ["新聞", "雑誌", "教科書", "ブログ"]
+        print("prediction:"+doc[numpy.argmax(y_pred)])
+        print("fact:"+doc[y_true])
 
+        print(beta.max(), beta.min())
+        print('beta average:', numpy.average(beta))
+        print('beta var:', numpy.var(beta))
+        beta[0][0] = (beta[0][0] - beta[0][0].min()) / beta[0][0].max()  # scale beta
 
-    # calculate macro-f1
-    print('Macro-F: %.4f' % f1_score(y_true, y_pred, average='macro'))
-
-    print('\nClass\tPre\tRec\tF1\tSupport')
-    for i, (p, r, f, s) in enumerate(zip(*precision_recall_fscore_support(y_true, y_pred))):
-        print('%d\t%.4f\t%.4f\t%.4f\t%d' % (i, p, r, f, s))
-
-    print('\nConfusion matrix (row: true, column: prediction)')
-    for pred in confusion_matrix(y_true, y_pred):
-        print('\t'.join([str(p) for p in pred]) + '\t(Support: %d)' % sum(pred))
-
+        for word, beta_for_word in zip(test_x[args.val_id].split(' '), beta[0][0]):
+            r = 255
+            g = 255 - int(255 * beta_for_word)
+            b = 255 - int(255 * beta_for_word)
+            print(fg(r, g, b) + word + fg.rs, end=' ')
+        else:
+            print('')
 
 if __name__ == '__main__':
     main()
